@@ -33,7 +33,7 @@ if __name__ == "__main__":
                         help='the name of this experiment')
     parser.add_argument('--gym-id', type=str, default="LunarLander-v2",
                         help='the id of the gym environment')
-    parser.add_argument('--learning-rate', type=float, default=2e-3,
+    parser.add_argument('--learning-rate', type=float, default=1e-3,
                         help='the learning rate of the optimizer')
     parser.add_argument('--seed', type=int, default=1,
                         help='seed of the experiment')
@@ -231,7 +231,6 @@ for update in range(1, num_updates+1):
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rs, ds, infos = envs.step(action)
         #envs.render()
-        rs = rs
         rewards[step], next_done = rs.view(-1), torch.Tensor(ds).to(device)
 
         for info in infos:
@@ -320,6 +319,8 @@ for update in range(1, num_updates+1):
         if args.kle_stop:
             if approx_kl > args.target_kl:
                 break
+    if update % 500 == 0:
+        torch.save(agent.state_dict(), f"models/agent.pt")
 
     # TRY NOT TO MODIFY: record rewards for plotting purposes
     writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]['lr'], global_step)
