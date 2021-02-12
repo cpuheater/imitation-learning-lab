@@ -20,7 +20,7 @@ expert = Agent(env)
 expert.load_state_dict(torch.load("./models/agent.pt"))
 expert.eval()
 
-def rollout(agent, env):
+def generate_rollout(agent, env):
     agent.to("cpu")
     states = []
     actions = []
@@ -57,17 +57,16 @@ def train(agent, x, y, epochs=50):
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
-        print(loss.item())
     return running_loss
 
 def main():
-    data_size = [1, 1000, 10000]
+    data_size = [1, 100, 1000]
     for size in data_size:
         x = []
         y = []
         student = Agent(env)
         for episode in range(size):
-            states, actions, rewards = rollout(expert, env)
+            states, actions, rewards = generate_rollout(expert, env)
             x.extend(states)
             y.extend(actions)
         x = torch.stack(x)
@@ -75,11 +74,10 @@ def main():
         train(student, x, y)
         episode_rewards = []
         for _ in range(50):
-            states, actions, rewards = rollout(student, env)
+            states, actions, rewards = generate_rollout(student, env)
             total_reward = np.sum(rewards)
             episode_rewards.append(total_reward)
-        print(f'Training size {str(size)}: mean: {str(np.mean(episode_rewards))}')
-        print('\n')
+        print(f'Number of training episodes: {str(size)}: reward mean: {str(np.mean(episode_rewards))} \n')
 
 if __name__ == "__main__":
     main()

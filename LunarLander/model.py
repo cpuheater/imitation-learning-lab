@@ -30,4 +30,4 @@ class Agent(nn.Module):
         return action, probs.log_prob(action), probs.entropy()
 
     def get_value(self, x):
-        return self.critic(self.forward(x))
+        return self.critic(self.network(x))
