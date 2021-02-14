@@ -47,20 +47,49 @@ def train(agent, x, y, epochs=50):
     agent = agent.to(device)
     criterion = nn.CrossEntropyLoss()
     running_loss = 0.0
+    accuracy = 0
     optimizer = optim.Adam(agent.parameters(), lr=0.01, eps=1e-5)
     for epoch in range(epochs):
         outputs = agent.forward(x)
         probs = torch.softmax(outputs, dim=1)
-        _, actions = probs.max(1)
+        _, predictions = probs.max(1)
         loss = criterion(outputs, y)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
-    return running_loss
+        accuracy += torch.sum(predictions == y)
+
+    return running_loss/ y.shape[0], accuracy/y.shape[0]
+
+def train_regularization(agent, x, y, epochs=50):
+    x = x.to(device)
+    y = y.to(device)
+    agent = agent.to(device)
+    running_loss = 0.0
+    accuracy = 0
+    optimizer = optim.Adam(agent.parameters(), lr=0.01, eps=1e-5)
+    for epoch in range(epochs):
+        _, log_prob, entropy = agent.get_action(x, y)
+        log_prob = log_prob.mean()
+        entropy = entropy.mean()
+
+        l2_norms = [torch.sum(torch.square(w)) for w in agent.parameters()]
+        l2_norm = sum(l2_norms) / 2  # divide by 2 to cancel with gradient of square
+
+        ent_loss = 0.001 * entropy
+        neglogp = -log_prob
+        l2_loss = 0.0 * l2_norm
+        loss = neglogp + ent_loss + l2_loss
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        running_loss += loss.item()
+
+    return running_loss / y.shape[0]
 
 def main():
-    data_size = [1, 100, 1000]
+    data_size = [1, 100, 100, 100, 100, 100, 100]
     for size in data_size:
         x = []
         y = []
@@ -77,7 +106,7 @@ def main():
             states, actions, rewards = generate_rollout(student, env)
             total_reward = np.sum(rewards)
             episode_rewards.append(total_reward)
-        print(f'Number of training episodes: {str(size)}: reward mean: {str(np.mean(episode_rewards))} \n')
+        print(f'Number of training rollouts: {str(size)}: reward mean: {str(np.mean(episode_rewards))} \n')
 
 if __name__ == "__main__":
     main()
