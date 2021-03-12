@@ -390,11 +390,10 @@ for update in range(starting_update, num_updates + 1):
                 break
 
     ## CRASH AND RESUME LOGIC:
-    if args.prod_mode:
-        if not os.path.exists(f"models/{experiment_name}"):
-            os.makedirs(f"models/{experiment_name}")
-        torch.save(agent.state_dict(), f"{wandb.run.dir}/agent.pt")
-        wandb.save(f"agent.pt")
+    #if args.prod_mode:
+    if not os.path.exists(f"models/"):
+            os.makedirs(f"models/")
+    torch.save(agent.state_dict(), f"models/agent.pt")
 
     #if global_step > 500000:
     tm.process(rewards.cpu().numpy(), obs.cpu().numpy(), actions.cpu().numpy(), dones.cpu().numpy(),

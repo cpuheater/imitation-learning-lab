@@ -13,9 +13,11 @@ from model import Agent, MicroRTSStatsRecorder, VecMonitor, VecPyTorch
 import pickle
 from gym_microrts.envs.vec_env import MicroRTSVecEnv
 from gym_microrts import microrts_ai
+import itertools
+import os
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 envs = MicroRTSVecEnv(
     num_envs=1,
@@ -47,43 +49,50 @@ def enjoy(agent):
     return rewards
 
 
-
-
 with open("trajectories.dat", 'rb') as rfp:
     trajectories = pickle.load(rfp)
 
-def get_rollouts(trajectories):
-    for t in trajectories:
-        yield t[0], t[1], t[2]
+def get_rollouts(trajectories, batch_size):
+    trajectories = list(filter(lambda x: x[0].shape[0] < 3000, trajectories))
+    states, actions, rewards = zip(*trajectories)
+    states = np.concatenate(states)
+    actions = np.concatenate(actions)
+    rewards = np.concatenate(rewards)
+    num = states.shape[0]
+    for start_index in range(0, num, batch_size):
+        end_index = min(num, start_index + batch_size)
+        b_states = states[start_index: end_index]
+        b_actions = actions[start_index:end_index]
+        b_rewards = rewards[start_index:end_index]
+        yield b_states, b_actions, b_rewards
 
 
-def train(agent, x, y, epochs=50):
+
+def train(agent, x, y, optimizer, epochs=1):
     x = x.to(device)
     y = y.to(device)
     agent = agent.to(device)
     criterion = nn.CrossEntropyLoss()
     running_loss = 0.0
-    accuracy = 0
-    optimizer = optim.Adam(agent.parameters(), lr=0.01, eps=1e-5)
     for epoch in range(epochs):
         outputs = agent.forward(x)
-        probs = torch.softmax(outputs, dim=1)
-        _, predictions = probs.max(1)
-        loss = criterion(outputs, y)
+        y_t = y.transpose(1, 0)
+        loss = 0
+        for i in range(len(outputs)):
+            a = outputs[i]
+            b = y_t[i]
+            loss += criterion(a, b)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
-        accuracy += torch.sum(predictions == y)
-
-    return running_loss/ y.shape[0], accuracy/y.shape[0]
+    return running_loss/epochs
 
 def train_regularization(agent, x, y, epochs=50):
     x = x.to(device)
     y = y.to(device)
     agent = agent.to(device)
     running_loss = 0.0
-    accuracy = 0
     optimizer = optim.Adam(agent.parameters(), lr=0.01, eps=1e-5)
     for epoch in range(epochs):
         _, log_prob, entropy = agent.get_action(x, y)
@@ -91,7 +100,7 @@ def train_regularization(agent, x, y, epochs=50):
         entropy = entropy.mean()
 
         l2_norms = [torch.sum(torch.square(w)) for w in agent.parameters()]
-        l2_norm = sum(l2_norms) / 2  # divide by 2 to cancel with gradient of square
+        l2_norm = sum(l2_norms) / 2
 
         ent_loss = 0.001 * entropy
         neglogp = -log_prob
@@ -105,22 +114,30 @@ def train_regularization(agent, x, y, epochs=50):
     return running_loss / y.shape[0]
 
 def main():
-    data_size = [1, 100, 100, 100, 100, 100, 100]
-    for size in data_size:
-        x = []
-        y = []
-        agent = Agent(1, envs).to(device)
-        rollouts = get_rollouts(trajectories)
+    data_size = 2000
+    agent = Agent(1, envs).to(device)
+    optimizer = optim.Adam(agent.parameters(), lr=0.0005, eps=1e-5)
+    for epoch in range(data_size):
+        rollouts = get_rollouts(trajectories, 64)
+        losses = []
         for states, rewards, actions in rollouts:
             x = torch.from_numpy(states).float()
             y = torch.from_numpy(actions).long()
-            train(agent, x, y)
-            episode_rewards = []
-        for _ in range(50):
-            states, actions, rewards = get_rollouts()
-            total_reward = np.sum(rewards)
-            episode_rewards.append(total_reward)
-        print(f'Number of training rollouts: {str(size)}: reward mean: {str(np.mean(episode_rewards))} \n')
+            loss = train(agent, x, y, optimizer, epochs=2)
+            losses.append(loss)
+
+        if epoch % 100 == 0:
+            if not os.path.exists(f"models/"):
+                os.makedirs(f"models/")
+            torch.save(agent.state_dict(), f"models/agent-il.pt")
+        print(f"epoch: {epoch} loss: {np.mean(losses)}")
+
+    #for _ in range(50):
+    #     states, actions, rewards = get_rollouts(trajectories, 50)
+    #     total_reward = np.sum(rewards)
+    #     episode_rewards.append(total_reward)
+    #print(f'Number of training rollouts: {str(size)}: reward mean: {str(np.mean(episode_rewards))} \n')
+
 
 if __name__ == "__main__":
     main()
