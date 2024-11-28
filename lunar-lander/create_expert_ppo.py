@@ -10,17 +10,14 @@ cv2.ocl.setUseOpenCL(False)
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
 import argparse
 from distutils.util import strtobool
 import numpy as np
 import gym
-from gym.wrappers import TimeLimit, Monitor
-import pybullet_envs
-from gym.spaces import Discrete, Box, MultiBinary, MultiDiscrete, Space
+import gymnasium as gym
+from gymnasium.spaces import Discrete
 import time
 import random
 import os
@@ -31,7 +28,7 @@ if __name__ == "__main__":
     # Common arguments
     parser.add_argument('--exp-name', type=str, default=os.path.basename(__file__).rstrip(".py"),
                         help='the name of this experiment')
-    parser.add_argument('--gym-id', type=str, default="LunarLander-v2",
+    parser.add_argument('--env-id', type=str, default="LunarLander-v2",
                         help='the id of the gym environment')
     parser.add_argument('--learning-rate', type=float, default=1e-3,
                         help='the learning rate of the optimizer')
@@ -95,39 +92,15 @@ if __name__ == "__main__":
 args.batch_size = int(args.num_envs * args.num_steps)
 args.minibatch_size = int(args.batch_size // args.n_minibatch)
 
-class VecPyTorch(VecEnvWrapper):
-    def __init__(self, venv, device):
-        super(VecPyTorch, self).__init__(venv)
-        self.device = device
-
-    def reset(self):
-        obs = self.venv.reset()
-        obs = torch.from_numpy(obs).float().to(self.device)
-        return obs
-
-    def step_async(self, actions):
-        actions = actions.cpu().numpy()
-        self.venv.step_async(actions)
-
-    def step_wait(self):
-        obs, reward, done, info = self.venv.step_wait()
-        obs = torch.from_numpy(obs).float().to(self.device)
-        reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
-        return obs, reward, done, info
-
-    def render(self):
-        self.venv.render()
-
-
 # TRY NOT TO MODIFY: setup the environment
-experiment_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-writer = SummaryWriter(f"runs/{experiment_name}")
+run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+writer = SummaryWriter(f"runs/{run_name}")
 writer.add_text('hyperparameters', "|param|value|\n|-|-|\n%s" % (
         '\n'.join([f"|{key}|{value}|" for key, value in vars(args).items()])))
 if args.prod_mode:
     import wandb
-    wandb.init(project=args.wandb_project_name, entity=args.wandb_entity, sync_tensorboard=True, config=vars(args), name=experiment_name, monitor_gym=True, save_code=True)
-    writer = SummaryWriter(f"/tmp/{experiment_name}")
+    wandb.init(project=args.wandb_project_name, entity=args.wandb_entity, sync_tensorboard=True, config=vars(args), name=run_name, monitor_gym=True, save_code=True)
+    writer = SummaryWriter(f"/tmp/{run_name}")
 
 # TRY NOT TO MODIFY: seeding
 device = torch.device('cuda' if torch.cuda.is_available() and args.cuda else 'cpu')
@@ -135,25 +108,22 @@ random.seed(args.seed)
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 torch.backends.cudnn.deterministic = args.torch_deterministic
-def make_env(gym_id, seed, idx):
+def make_env(env_id, idx, capture_video, run_name):
     def thunk():
-        env = gym.make(gym_id)
+        if capture_video and idx == 0:
+            env = gym.make(env_id, render_mode="rgb_array")
+            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        else:
+            env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        if args.capture_video:
-            if idx == 0:
-                env = Monitor(env, f'videos/{experiment_name}')
-        env.seed(seed)
-        env.action_space.seed(seed)
-        env.observation_space.seed(seed)
         return env
     return thunk
+
 #envs = VecPyTorch(DummyVecEnv([make_env(args.gym_id, args.seed+i, i) for i in range(args.num_envs)]), device)
-# if args.prod_mode:
-envs = VecPyTorch(
-         SubprocVecEnv([make_env(args.gym_id, args.seed+i, i) for i in range(args.num_envs)], "fork"),
-         device
-     )
-assert isinstance(envs.action_space, Discrete), "only discrete action space is supported"
+envs = gym.vector.AsyncVectorEnv(
+        [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_envs)],
+    )
+assert isinstance(envs.single_action_space, Discrete), "only discrete action space is supported"
 
 # ALGO LOGIC: initialize agent here:
 from model import Agent
@@ -165,8 +135,8 @@ if args.anneal_lr:
     lr = lambda f: f * args.learning_rate
 
 # ALGO Logic: Storage for epoch data
-obs = torch.zeros((args.num_steps, args.num_envs) + envs.observation_space.shape).to(device)
-actions = torch.zeros((args.num_steps, args.num_envs) + envs.action_space.shape).to(device)
+obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
 logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
 rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
 dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -177,7 +147,8 @@ global_step = 0
 start_time = time.time()
 # Note how `next_obs` and `next_done` are used; their usage is equivalent to
 # https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/84a7582477fb0d5c82ad6d850fe476829dddd2e1/a2c_ppo_acktr/storage.py#L60
-next_obs = envs.reset()
+next_obs, _ = envs.reset()
+next_obs = torch.Tensor(next_obs).to(device)
 next_done = torch.zeros(args.num_envs).to(device)
 num_updates = args.total_timesteps // args.batch_size
 for update in range(1, num_updates+1):
@@ -202,15 +173,18 @@ for update in range(1, num_updates+1):
         logprobs[step] = logproba
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rs, ds, infos = envs.step(action)
+        next_obs, rs, terminations, truncations, infos = envs.step(action.cpu().numpy())
+        next_done = np.logical_or(terminations, truncations)
         #envs.render()
-        rewards[step], next_done = rs.view(-1), torch.Tensor(ds).to(device)
-
-        for info in infos:
-            if 'episode' in info.keys():
-                print(f"global_step={global_step}, episode_reward={info['episode']['r']}")
-                writer.add_scalar("charts/episode_reward", info['episode']['r'], global_step)
-                break
+        rewards[step] = torch.tensor(rs).to(device).view(-1) 
+        next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
+        
+        if "final_info" in infos:
+                for info in infos["final_info"]:
+                    if info and "episode" in info:
+                        print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                        writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                        writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
 
     # bootstrap reward if not done. reached the batch limit
     with torch.no_grad():
@@ -241,9 +215,9 @@ for update in range(1, num_updates+1):
             advantages = returns - values
 
     # flatten the batch
-    b_obs = obs.reshape((-1,)+envs.observation_space.shape)
+    b_obs = obs.reshape((-1,)+envs.single_observation_space.shape)
     b_logprobs = logprobs.reshape(-1)
-    b_actions = actions.reshape((-1,)+envs.action_space.shape)
+    b_actions = actions.reshape((-1,)+envs.single_action_space.shape)
     b_advantages = advantages.reshape(-1)
     b_returns = returns.reshape(-1)
     b_values = values.reshape(-1)

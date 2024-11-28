@@ -1,7 +1,7 @@
 import sys
 
 import torch
-import gym
+import gymnasium
 from time import sleep
 import numpy as np
 import torch.nn as nn
@@ -11,21 +11,24 @@ from model import Agent
 
 def main():
 
-    env = gym.make("LunarLander-v2")
+    env = gymnasium.make("LunarLander-v2", render_mode="human")
+    env.single_observation_space = env.observation_space
+    env.single_action_space = env.action_space
     agent = Agent(env)
     agent.load_state_dict(torch.load("./models/agent.pt"))
     agent.eval()
 
-    obs = env.reset()
+    obs, _ = env.reset()
     done = False
     for i in range(10000):
         env.render()
         obs = torch.from_numpy(obs).float()
         action, _, _ = agent.get_action(obs)
-        obs, rew, done, info = env.step(action.cpu().numpy())
+        obs, rewards, terminations, truncations, info = env.step(action.cpu().numpy())
+        done = np.logical_or(terminations, truncations)
         sleep(0.001)
         if done:
-            obs = env.reset()
+            obs, _ = env.reset()
 
 
 if __name__ == '__main__':
