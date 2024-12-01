@@ -31,7 +31,7 @@ class Args:
     """`torch.backends.cudnn.deterministic=False`"""
     lr: float = 0.01
     """the learning rate of the optimizer"""
-    rollout_steps: int = 20000
+    rollout_steps: int = 10000
     """"""
     epochs: int = 50
     """num train epochs"""
@@ -47,10 +47,6 @@ class MyDataset(Dataset):
     def __getitem__(self, index):
         x = self.inputs[index]
         y = self.labels[index]
-
-        #if self.transform:
-            #x = Image.fromarray(self.data[index].astype(np.uint8).transpose(1,2,0))
-        #    x = self.transform(x)
 
         return x, y
 
@@ -165,11 +161,11 @@ if __name__ == "__main__":
     train_regularization(writer, student, inputs, labels, args.epochs, args.lr)
     episode_rewards = []
     for _ in range(50):
-        env = gymnasium.make("LunarLander-v2", render_mode="human")
+        #env = gymnasium.make("LunarLander-v2", render_mode="human")
         states, actions, rewards = generate_rollout(student, env)
         total_reward = np.sum(rewards)
         episode_rewards.append(total_reward)
-    print(f'Number of training rollouts: {str(len(states))}: reward mean: {str(np.mean(episode_rewards))} \n')
+    print(f'Number of training rollouts: {str(len(inputs))}: reward mean: {str(np.mean(episode_rewards))} \n')
 
 
 
