@@ -23,18 +23,16 @@ from model import Simple
 
 @dataclass
 class Args:
-    env_id: str = "basic"
+    env_id: str = "health_gathering_supreme"
     """the id of the environment"""
     seed: int = 1
     """seed of the experiment"""
     torch_deterministic: bool = True
     """"""
-    lr: float = 0.01
+    lr: float = 0.001
     """the learning rate of the optimizer"""
     rollout_steps: int = 10000
     """"""
-    epochs: int = 30
-    """num train epochs"""
     epochs: int = 50
     """num train epochs"""
     num_actions: int = 3
@@ -43,6 +41,10 @@ class Args:
     """"""
     model_dir: str = "models"
     """"""
+    weight_decay: float = 0.00001
+    """weight decay"""
+    batch_size:int = 64
+    """batch_size"""
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -60,15 +62,14 @@ class MyDataset(Dataset):
     def __len__(self):
         return len(self.inputs)
 
-def train(writer, model, dataset, epochs=50, lr=0.01):
+def train(writer, model, dataset, epochs, lr, weight_decay):
     running_loss = 0.0
-    optimizer = optim.Adam(model.parameters(), lr=lr, eps=1e-5)
-    dataloader = DataLoader(dataset, batch_size=64)
+    optimizer = optim.Adam(model.parameters(), lr=lr, eps=1e-5, weight_decay=weight_decay)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size)
     running_loss_history = []
     for epoch in range(epochs):
         running_loss = 0.0
         for (input, labels) in dataloader:
-            input = input.permute(0, 3, 2, 1)
             out =model(input)
             loss = F.binary_cross_entropy_with_logits(out, labels.float())
             optimizer.zero_grad()
@@ -103,9 +104,9 @@ if __name__ == "__main__":
     data = torch.load(args.data_file)
     dataset = MyDataset(data)
     model = Simple(3, args.num_actions)
-    train(writer, model, dataset, args.epochs, args.lr)
+    train(writer, model, dataset, args.epochs, args.lr, args.weight_decay)
     episode_rewards = []
-    torch.save(model, f"{args.model_dir}/{run_name}_{args.epochs}.pt")
+    torch.save(model, f"{args.model_dir}/{args.env_id}_{args.epochs}.pt")
     print("Finished training")
 
 

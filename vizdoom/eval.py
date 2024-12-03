@@ -17,13 +17,13 @@ import cv2
 
 @dataclass
 class Args:
-    env_id: str = "basic"
+    env_id: str = "health_gathering_supreme"
     """the id of the environment"""
     num_actions: int = 3
     """num actions"""
     num_episodes: int = 3
     """"""
-    model_file: str = "models/train__basic__1__1733160758_50.pt"
+    model_file: str = "models/health_gathering_supreme_50.pt"
     """"""
     skip_frame: int = 2
     """"""
@@ -46,7 +46,7 @@ if __name__ == '__main__':
             obs = obs.transpose(2,0,1)
             obs = torch.from_numpy(obs).float().unsqueeze(0)
             out = model(obs)[0]
-            probs = torch.softmax(out, dim=0)
+            probs = torch.sigmoid(out)
             max_idx = torch.argmax(probs, 0, keepdim=True)
             one_hot = torch.FloatTensor(probs.shape)
             one_hot.zero_()
