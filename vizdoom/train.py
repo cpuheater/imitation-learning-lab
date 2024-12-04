@@ -33,7 +33,7 @@ class Args:
     """the learning rate of the optimizer"""
     rollout_steps: int = 10000
     """"""
-    epochs: int = 50
+    epochs: int = 100
     """num train epochs"""
     num_actions: int = 3
     """num actions"""
