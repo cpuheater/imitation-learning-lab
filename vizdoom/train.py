@@ -1,8 +1,6 @@
 # https://github.com/facebookresearch/torchbeast/blob/master/torchbeast/core/environment.py
 
 import numpy as np
-from collections import deque
-import gymnasium
 import cv2
 cv2.ocl.setUseOpenCL(False)
 from dataclasses import dataclass
@@ -12,7 +10,9 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 import time
+import functools
 import os
+import re
 from torch.utils.tensorboard import SummaryWriter
 import torch
 import random
@@ -23,7 +23,7 @@ from model import Simple
 
 @dataclass
 class Args:
-    env_id: str = "health_gathering_supreme"
+    env_id: str = "deathmatch"
     """the id of the environment"""
     seed: int = 1
     """seed of the experiment"""
@@ -35,9 +35,9 @@ class Args:
     """"""
     epochs: int = 100
     """num train epochs"""
-    num_actions: int = 3
+    num_actions: int = 7
     """num actions"""
-    data_file: str = "data/data.pt"
+    data_dir: str = "data"
     """"""
     model_dir: str = "models"
     """"""
@@ -50,8 +50,8 @@ class Args:
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class MyDataset(Dataset):
-    def __init__(self, data, transform=None):
-        self.inputs, self.labels = data
+    def __init__(self, inputs, labels, transform=None):
+        self.inputs, self.labels = inputs, labels
         #self.labels = torch.LongTensor(labels)
         self.transform = transform
 
@@ -67,7 +67,7 @@ def train(writer, model, dataset, epochs, lr, weight_decay):
     optimizer = optim.Adam(model.parameters(), lr=lr, eps=1e-5, weight_decay=weight_decay)
     dataloader = DataLoader(dataset, batch_size=args.batch_size)
     running_loss_history = []
-    for epoch in range(epochs):
+    for epoch in tqdm(range(epochs)):
         running_loss = 0.0
         for (input, labels) in dataloader:
             out =model(input)
@@ -82,6 +82,21 @@ def train(writer, model, dataset, epochs, lr, weight_decay):
         writer.add_scalar("losses/reg_loss", running_loss, epoch)
 
     return np.mean(running_loss_history)
+
+def load_data(model_dir, env_id):
+    def do_reduce(accum, e):
+        accum[0].append(e[0])
+        accum[1].append(e[1])
+        return accum
+    pattern = re.compile(fr"{env_id}_.*\.pt")
+    result = []
+    for filename in os.listdir(model_dir):
+        if pattern.match(filename):
+            result.append(torch.load(os.path.join(model_dir, filename)))
+    obs, actions = functools.reduce(do_reduce, result, ([], []))
+    obs, actions = torch.cat(obs), torch.cat(actions)
+    return obs, actions
+
 
 if __name__ == "__main__":
 
@@ -101,8 +116,9 @@ if __name__ == "__main__":
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
-    data = torch.load(args.data_file)
-    dataset = MyDataset(data)
+    obs, actions = load_data(args.data_dir, args.env_id)
+    print(f"Training data consist of {len(obs)} frames.")
+    dataset = MyDataset(obs, actions)
     model = Simple(3, args.num_actions)
     train(writer, model, dataset, args.epochs, args.lr, args.weight_decay)
     episode_rewards = []

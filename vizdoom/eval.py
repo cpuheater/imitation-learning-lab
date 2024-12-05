@@ -17,13 +17,13 @@ import cv2
 
 @dataclass
 class Args:
-    env_id: str = "health_gathering_supreme"
+    env_id: str = "deathmatch"
     """the id of the environment"""
-    num_actions: int = 3
+    num_actions: int = 7
     """num actions"""
     num_episodes: int = 3
     """"""
-    model_file: str = "models/health_gathering_supreme_50.pt"
+    model_file: str = "models/deathmatch_100.pt"
     """"""
     skip_frame: int = 2
     """"""
