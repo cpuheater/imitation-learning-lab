@@ -19,11 +19,11 @@ import random
 import tyro
 from tqdm.auto import tqdm
 from torch.utils.data import Dataset, DataLoader
-from model import Simple
+from networks import Simple, ImpalaCNNSmall, get_network
 
 @dataclass
 class Args:
-    env_id: str = "deathmatch"
+    env_id: str = "monsters"
     """the id of the environment"""
     seed: int = 1
     """seed of the experiment"""
@@ -35,7 +35,7 @@ class Args:
     """"""
     epochs: int = 100
     """num train epochs"""
-    num_actions: int = 7
+    num_actions: int = 5
     """num actions"""
     data_dir: str = "data"
     """"""
@@ -45,6 +45,9 @@ class Args:
     """weight decay"""
     batch_size:int = 64
     """batch_size"""
+    network_type: str = "ImpalaCNNLarge"
+    """ImpalaCNNSmall ImpalaCNNLarge"""
+
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -119,10 +122,10 @@ if __name__ == "__main__":
     obs, actions = load_data(args.data_dir, args.env_id)
     print(f"Training data consist of {len(obs)} frames.")
     dataset = MyDataset(obs, actions)
-    model = Simple(3, args.num_actions)
+    model = get_network(args.network_type, 3, args.num_actions)
     train(writer, model, dataset, args.epochs, args.lr, args.weight_decay)
     episode_rewards = []
-    torch.save(model, f"{args.model_dir}/{args.env_id}_{args.epochs}.pt")
+    torch.save(model, f"{args.model_dir}/{args.env_id}_{args.network_type}_{args.epochs}.pt")
     print("Finished training")
 
 
