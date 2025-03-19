@@ -72,9 +72,9 @@ def train(writer, model, dataset, epochs, lr, weight_decay):
     running_loss_history = []
     for epoch in tqdm(range(epochs)):
         running_loss = 0.0
-        for (input, labels) in dataloader:
-            out =model(input)
-            loss = F.binary_cross_entropy_with_logits(out, labels.float())
+        for (input, labels) in dataloader: 
+            out =model(input.to(device))
+            loss = F.binary_cross_entropy_with_logits(out, labels.to(device).float())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     obs, actions = load_data(args.data_dir, args.env_id)
     print(f"Training data consist of {len(obs)} frames.")
     dataset = MyDataset(obs, actions)
-    model = get_network(args.network_type, 3, args.num_actions)
+    model = get_network(args.network_type, 3, args.num_actions).to(device)
     train(writer, model, dataset, args.epochs, args.lr, args.weight_decay)
     episode_rewards = []
     torch.save(model, f"{args.model_dir}/{args.env_id}_{args.network_type}_{args.epochs}.pt")

@@ -45,7 +45,7 @@ if __name__ == '__main__':
         game.set_mode(vzd.Mode.PLAYER)
 
     game.init()
-    model = torch.load(args.model_file)
+    model = torch.load(args.model_file, weights_only=False, map_location='cpu')
     model.eval()
     total_rewards = []
     for episode in tqdm(range(args.num_episodes)):
