@@ -23,7 +23,7 @@ from networks import Simple, ImpalaCNNSmall, get_network
 
 @dataclass
 class Args:
-    env_id: str = "monsters"
+    env_id: str = "basic"
     """the id of the environment"""
     seed: int = 1
     """seed of the experiment"""
@@ -31,11 +31,9 @@ class Args:
     """"""
     lr: float = 0.001
     """the learning rate of the optimizer"""
-    rollout_steps: int = 10000
-    """"""
     epochs: int = 100
     """num train epochs"""
-    num_actions: int = 5
+    num_actions: int = 3
     """num actions"""
     data_dir: str = "data"
     """"""

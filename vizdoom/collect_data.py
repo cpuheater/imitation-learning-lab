@@ -16,11 +16,11 @@ import vizdoom as vzd
 
 @dataclass
 class Args:
-    env_id: str = "monsters"
+    env_id: str = "basic"
     """the id of the environment"""
     seed: int = 1
     """seed of the experiment"""
-    episodes: int = 1
+    episodes: int = 50
     """num of episodes"""
     data_dir: str = "data"
     """"""
@@ -38,6 +38,7 @@ if __name__ == '__main__':
 
     game.load_config(f"scenarios/{args.env_id}.cfg")
     #game.add_game_args("+freelook 1")
+    game.add_game_args('+"bind w +forward" +"bind s +back" +"bind a +left" +"bind d +right"')
     game.set_mode(vzd.Mode.SPECTATOR)
     game.set_window_visible(True)
     game.init()
@@ -72,5 +73,5 @@ if __name__ == '__main__':
     game.close()
     actions = torch.stack(actions)
     obs = torch.stack(obs)
-    torch.save((obs, actions),f"{args.data_dir}/{args.env_id}_{total_frames}_{int(time.time())}.pt")
+    torch.save((obs, actions),f"{args.data_dir}/{args.env_id}_{total_frames}_{time.strftime('%Y_%m_%d__%H_%M_%S')}.pt")
     print(f"Model saved ! Total frames: {total_frames}")

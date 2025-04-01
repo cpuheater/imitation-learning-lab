@@ -18,13 +18,13 @@ from tqdm.auto import tqdm
 
 @dataclass
 class Args:
-    env_id: str = "monsters"
+    env_id: str = "basic"
     """the id of the environment"""
-    num_actions: int = 5
+    num_actions: int = 3
     """num actions"""
     num_episodes: int = 5
     """"""
-    model_file: str = "models/monsters_ImpalaCNNLarge_100.pt"
+    model_file: str = "models/basic_ImpalaCNNLarge_100.pt"
     """monsters_ImpalaCNNSmall_100 monsters_Small_100.pt"""
     skip_frame: int = 2
     """"""
